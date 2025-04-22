@@ -22,7 +22,7 @@ jobs:
     - name: Trigger Patch on Linux EC2
       run: |
         aws ssm send-command \
-          --document-name "Ubuntu-Staging-Baseline" \
+          --document-name "AWS-RunPatchBaseline" \
           --targets "Key=tag:PatchGroup,Values=staging-ubuntu" \
           --comment "GitHub Actions patching staging-ubuntu" \
           --parameters "Operation=Install" \
