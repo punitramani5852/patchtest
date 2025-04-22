@@ -29,7 +29,7 @@ jobs:
           --timeout-seconds 600 \
           --max-concurrency "2" \
           --max-errors "1" \
-          --output "patchs3ubuntu"
+          --output patchs3ubuntu
 
     # - name: Trigger Patch on Windows EC2
     #   run: |
