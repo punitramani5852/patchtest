@@ -1,1 +1,44 @@
-this is basic yaml file
+name: Patch EC2 via SSM
+
+on:
+  workflow_dispatch:
+
+jobs:
+  patch-ec2:
+    name: Patch EC2 Instances
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Trigger Patch on Linux EC2
+      run: |
+        aws ssm send-command \
+          --document-name "AWS-RunPatchBaseline" \
+          --targets "Key=tag:PatchGroup,Values=staging-ubuntu" \
+          --comment "GitHub Actions patching staging-ubuntu" \
+          --parameters "Operation=Install" \
+          --timeout-seconds 600 \
+          --max-concurrency "2" \
+          --max-errors "1" \
+          --output "patchs3ubuntu"
+
+    # - name: Trigger Patch on Windows EC2
+    #   run: |
+    #     aws ssm send-command \
+    #       --document-name "AWS-RunPatchBaseline" \
+    #       --targets "Key=tag:PatchGroup,Values=Windows-Dev" \
+    #       --comment "GitHub Actions patching Windows dev" \
+    #       --parameters "Operation=Install" \
+    #       --timeout-seconds 1200 \
+    #       --max-concurrency "1" \
+    #       --max-errors "1" \
+    #       --output-s3-bucket-name your-log-bucket
