@@ -19,7 +19,31 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
-    - name: Trigger Patch on Linux EC2
+    - name: Trigger Patch on Linux EC2 (dry run )
+      run: |
+        aws ssm send-command \
+          --document-name "AWS-RunPatchBaseline" \
+          --targets "Key=tag:PatchGroup,Values=staging-ubuntu" \
+          --comment "GitHub Actions patching staging-ubuntu" \
+          --parameters "Operation=Scan" \
+          --timeout-seconds 600 \
+          --max-concurrency "2" \
+          --max-errors "1" \
+          --output-s3-bucket-name patchs3ubuntu
+
+
+    - name: Check Compliance Summary (Pre-Patch)
+      run: |
+        aws ssm list-compliance-summaries \
+          --filters Key=PatchGroup,Values=staging-ubuntu
+
+    - name: Check Compliance Summary (Pre-Patch)
+      run: |
+        aws ssm list-compliance-summaries \
+          --filters Key=PatchGroup,Values=staging-ubuntu
+
+    - name: Trigger Actual Patch on Linux EC2 (if scan passes)
+      if: success()
       run: |
         aws ssm send-command \
           --document-name "AWS-RunPatchBaseline" \
@@ -30,6 +54,51 @@ jobs:
           --max-concurrency "2" \
           --max-errors "1" \
           --output-s3-bucket-name patchs3ubuntu
+
+    # - name: Trigger Patch on Windows EC2
+    #   run: |
+    #     aws ssm send-command \
+    #       --document-name "AWS-RunPatchBaseline" \
+    #       --targets "Key=tag:PatchGroup,Values=Windows-Dev" \
+    #       --comment "GitHub Actions patching Windows dev" \
+    #       --parameters "Operation=Install" \
+    #       --timeout-seconds 1200 \
+    #       --max-concurrency "1" \
+    #       --max-errors "1" \
+    #       --output-s3-bucket-name your-log-bucket
+
+    - name: Verify Services and Rollback if Needed
+      run: |
+        INSTANCE_ID=$(aws ec2 describe-instances \
+                       --filters "Name=tag:PatchGroup,Values=staging-ubuntu" \
+                       --query "Reservations[*].Instances[*].InstanceId" \
+                       --output text)
+
+        SYSTEM_STATUS=$(aws ec2 describe-instance-status \
+          --instance-ids $INSTANCE_ID \
+          --query "InstanceStatuses[0].SystemStatus.Status" \
+          --output text)
+
+        INSTANCE_STATUS=$(aws ec2 describe-instance-status \
+          --instance-ids $INSTANCE_ID \
+          --query "InstanceStatuses[0].InstanceStatus.Status" \
+          --output text)
+
+        if [[ "$SYSTEM_STATUS" != "ok" || "$INSTANCE_STATUS" != "ok" ]]; then
+          echo "EC2 system or instance status check failed."
+          aws ec2 start-instances --instance-ids i-rollback-instance-id
+          aws ec2 stop-instances --instance-ids $INSTANCE_ID
+          exit 1
+        else
+          echo "EC2 instance is healthy at infrastructure level."
+        fi
+
+    - name: Check Compliance Summary (Post-Patch)
+      run: |
+        aws ssm list-compliance-summaries \
+          --filters Key=PatchGroup,Values=Linux-Prod
+
+
 
     # - name: Trigger Patch on Windows EC2
     #   run: |
